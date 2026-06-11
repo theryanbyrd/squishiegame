@@ -13,6 +13,7 @@ import type {
 } from "../types";
 import { levelForPoints } from "../data/levels";
 import { BACKGROUNDS, SKINS, TRAILS } from "../data/cosmetics";
+import { isSoundEnabled, setSoundEnabled } from "../game/sounds";
 
 const KEYS = {
   players: "dumplingDash.players",
@@ -92,6 +93,7 @@ type AppState = {
   selectPlayer: (id: string) => void;
   switchPlayer: () => void;
   setLeaderboardType: (t: LeaderboardType) => void;
+  toggleSound: () => void;
   recordGame: (stats: RunStats) => void;
   setCustomization: (type: UnlockType, key: string) => void;
   isUnlocked: (playerId: string, type: UnlockType, key: string) => boolean;
@@ -105,7 +107,7 @@ export const useStore = create<AppState>((set, get) => ({
   achievements: loadJSON<Achievement[]>(KEYS.achievements, []),
   unlocks: loadJSON<Unlock[]>(KEYS.unlocks, []),
   leaderboardType: "totalPoints",
-  soundEnabled: true,
+  soundEnabled: isSoundEnabled(),
   lastSummary: null,
 
   setScreen: (screen) => set({ screen }),
@@ -115,6 +117,12 @@ export const useStore = create<AppState>((set, get) => ({
   switchPlayer: () => set({ selectedPlayerId: null, screen: "select" }),
 
   setLeaderboardType: (t) => set({ leaderboardType: t }),
+
+  toggleSound: () => {
+    const on = !get().soundEnabled;
+    setSoundEnabled(on);
+    set({ soundEnabled: on });
+  },
 
   recordGame: (stats) => {
     const state = get();

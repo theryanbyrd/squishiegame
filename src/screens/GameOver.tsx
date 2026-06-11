@@ -1,19 +1,28 @@
+import { useEffect } from "react";
 import { useStore, currentPlayer } from "../store/store";
 import { levelName, levelProgress } from "../data/levels";
 import { achievementDef } from "../data/achievements";
 import { BACKGROUNDS, SKINS, TRAILS } from "../data/cosmetics";
+import { sfx } from "../game/sounds";
 
 export default function GameOver() {
   const summary = useStore((s) => s.lastSummary);
   const player = useStore((s) => currentPlayer(s));
   const setScreen = useStore((s) => s.setScreen);
 
+  const leveledUp = !!summary && summary.newLevel > summary.oldLevel;
+  const gotBadge = !!summary && summary.newAchievements.length > 0;
+
+  useEffect(() => {
+    if (leveledUp) sfx.levelup();
+    else if (gotBadge) sfx.badge();
+  }, [leveledUp, gotBadge]);
+
   if (!summary || !player) {
     setScreen("select");
     return null;
   }
   const progress = levelProgress(summary.totalPoints);
-  const leveledUp = summary.newLevel > summary.oldLevel;
 
   const unlockTitle = (type: string, key: string) => {
     const defs =

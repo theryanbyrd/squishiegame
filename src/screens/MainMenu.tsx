@@ -4,6 +4,8 @@ import { levelName, levelProgress } from "../data/levels";
 export default function MainMenu() {
   const setScreen = useStore((s) => s.setScreen);
   const switchPlayer = useStore((s) => s.switchPlayer);
+  const soundEnabled = useStore((s) => s.soundEnabled);
+  const toggleSound = useStore((s) => s.toggleSound);
   const player = useStore((s) => currentPlayer(s));
 
   if (!player) {
@@ -47,6 +49,9 @@ export default function MainMenu() {
         </button>
         <button className="btn" onClick={() => setScreen("howto")}>
           ❓ How to Play
+        </button>
+        <button className="btn ghost" onClick={toggleSound}>
+          {soundEnabled ? "🔊 Sound On" : "🔇 Sound Off"}
         </button>
         <button className="btn ghost" onClick={switchPlayer}>
           ↩ Switch Player

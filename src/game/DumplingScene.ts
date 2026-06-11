@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import type { RunStats } from "../types";
+import { sfx } from "./sounds";
 
 export type SceneConfig = {
   playerName: string;
@@ -275,6 +276,7 @@ export class DumplingScene extends Phaser.Scene {
   private flap() {
     if (this.over) return;
     if (!this.started) this.startRun();
+    sfx.flap();
     this.bao.setVelocityY(-380);
     this.tweens.add({
       targets: this.bao,
@@ -358,8 +360,10 @@ export class DumplingScene extends Phaser.Scene {
     if (kind === "golden") {
       this.runScore += 10;
       this.golden = true;
+      sfx.golden();
     } else {
       this.runScore += 3;
+      sfx.collect();
     }
     this.burst(this.bao.x, this.bao.y, kind === "golden" ? 0xffc83d : 0xfff3a0, 10);
     this.updateHud();
@@ -417,6 +421,7 @@ export class DumplingScene extends Phaser.Scene {
       ) {
         o.setData("scored", true);
         this.runScore += 1;
+        sfx.pass();
         this.updateHud();
       }
       if (o.x < -80) o.destroy();
@@ -438,6 +443,7 @@ export class DumplingScene extends Phaser.Scene {
   private endRun() {
     if (this.over) return;
     this.over = true;
+    sfx.gameover();
     this.spawnTimer?.remove();
     this.physics.pause();
     this.bao.setTint(0xffb7c5);
