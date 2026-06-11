@@ -60,7 +60,6 @@ export class DumplingScene extends Phaser.Scene {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private aimAngle = -Math.PI / 2; // space mode aim, starts pointing up
   private timeLeft = 0; // timed mode countdown, ms
-  private invincibleUntil = 0;
   private clockText?: Phaser.GameObjects.Text;
 
   private started = false;
@@ -84,7 +83,6 @@ export class DumplingScene extends Phaser.Scene {
     this.mode = "flappy";
     this.aimAngle = -Math.PI / 2;
     this.timeLeft = 60_000;
-    this.invincibleUntil = 0;
     this.started = false;
     this.over = false;
     this.runScore = 0;
@@ -183,10 +181,7 @@ export class DumplingScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    this.physics.add.overlap(this.bao, this.obstacles, () => {
-      if (this.cfg.gameMode === "timed") this.bonk();
-      else this.endRun();
-    });
+    this.physics.add.overlap(this.bao, this.obstacles, () => this.endRun());
     this.physics.add.overlap(this.bao, this.collectibles, (_b, c) =>
       this.collect(c as Collectible)
     );
@@ -420,11 +415,11 @@ export class DumplingScene extends Phaser.Scene {
     }
     bottom.setData("scoring", true);
 
-    // collectible between obstacles (70% chance) — value scales with how
-    // far off the safe path it sits: in the gap 1pt, outside it 4pts,
-    // way up high or down low 8pts
-    const roll = Math.random();
-    if (roll < 0.7) {
+    // collectible between obstacles — value scales with how far off the
+    // safe path it sits: in the gap 1pt, outside it 4pts, way up high or
+    // down low 8pts. Timed mode spawns fewer but each is worth more time.
+    const chance = this.cfg.gameMode === "timed" ? 0.35 : 0.7;
+    if (Math.random() < chance) {
       const golden = Math.random() < 0.05;
       const kind = golden
         ? "golden"
@@ -470,9 +465,9 @@ export class DumplingScene extends Phaser.Scene {
     const value = (c.getData("value") as number) ?? (kind === "golden" ? 10 : 3);
     if (this.cfg.gameMode === "timed") {
       // treats buy time instead of points
-      const secs = kind === "golden" ? 5 : value >= 8 ? 3 : value >= 4 ? 2 : 1;
+      const secs = kind === "golden" ? 10 : value >= 8 ? 6 : value >= 4 ? 4 : 2;
       this.timeLeft += secs * 1000;
-      this.scorePop(c.x, c.y, `+${secs}s`, secs >= 3 ? "#e8a200" : "#4a9a6a");
+      this.scorePop(c.x, c.y, `+${secs}s`, secs >= 6 ? "#e8a200" : "#4a9a6a");
     } else {
       this.runScore += value;
       this.scorePop(c.x, c.y, `+${value}`, value >= 8 ? "#e8a200" : "#b35a8a");
@@ -486,23 +481,6 @@ export class DumplingScene extends Phaser.Scene {
     this.burst(this.bao.x, this.bao.y, kind === "golden" ? 0xffc83d : 0xfff3a0, 10);
     this.updateHud();
     this.maybeEnterSpaceMode();
-  }
-
-  private bonk() {
-    if (this.over || this.time.now < this.invincibleUntil) return;
-    this.invincibleUntil = this.time.now + 1300;
-    this.timeLeft -= 3000;
-    sfx.zap();
-    this.scorePop(this.bao.x, this.bao.y - 32, "-3s", "#e85a7a");
-    this.cameras.main.shake(120, 0.008);
-    this.tweens.add({
-      targets: this.bao,
-      alpha: 0.35,
-      duration: 110,
-      yoyo: true,
-      repeat: 5,
-      onComplete: () => this.bao.setAlpha(1),
-    });
   }
 
   private scorePop(x: number, y: number, text: string, color: string) {
@@ -758,21 +736,9 @@ export class DumplingScene extends Phaser.Scene {
       }
     }
 
-    // floor / ceiling: ends a classic run; in timed mode it's a time
-    // penalty and a bounce — only the clock ends the run
+    // floor / ceiling ends the run
     if (this.bao.y > GAME_HEIGHT - 16 || this.bao.y < -10) {
-      if (this.cfg.gameMode === "timed") {
-        if (this.bao.y > GAME_HEIGHT - 16) {
-          this.bao.y = GAME_HEIGHT - 16;
-          this.bao.setVelocityY(-360);
-          this.bonk();
-        } else {
-          this.bao.y = -10;
-          this.bao.setVelocityY(60);
-        }
-      } else {
-        this.endRun();
-      }
+      this.endRun();
     }
   }
 
