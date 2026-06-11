@@ -9,6 +9,7 @@ export default function PlayerSelect() {
 
   return (
     <div className="page">
+      <div className="brand">Byrdman's</div>
       <h1 className="title">
         Squishy Dumpling Dash <span className="bounce">🥟</span>
       </h1>
@@ -25,6 +26,7 @@ export default function PlayerSelect() {
               className="player-card"
               onClick={() => selectPlayer(p.id)}
             >
+              <div className="card-brand">Byrdman's</div>
               <div className="player-avatar">{p.avatar}</div>
               <div className="player-info">
                 <div className="player-name">{p.name}</div>

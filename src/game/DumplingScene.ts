@@ -126,6 +126,17 @@ export class DumplingScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(20);
 
+    this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 16, "Byrdman's Squishy Dumpling Dash", {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "13px",
+        fontStyle: "bold",
+        color: textColor,
+      })
+      .setOrigin(0.5)
+      .setAlpha(0.55)
+      .setDepth(20);
+
     this.startText = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 90, "tap to bounce!", {
         fontFamily: "system-ui, sans-serif",

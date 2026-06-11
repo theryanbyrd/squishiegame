@@ -54,6 +54,7 @@ export default function Leaderboard() {
 
   return (
     <div className="page">
+      <div className="brand">Byrdman's Squishy Dumpling Dash</div>
       <h1 className="title small">🏆 Leaderboard</h1>
       <div className="tabs">
         {TABS.map((t) => (

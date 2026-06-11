@@ -34,6 +34,31 @@ body {
   margin-top: 8px;
 }
 
+.brand {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #b88ad4;
+  text-shadow: 0 1px 0 #ffffff90;
+}
+
+.page > .brand + .title {
+  margin-top: 0;
+}
+
+.card-brand {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #d8a8c4;
+}
+
 .title {
   font-size: 30px;
   text-align: center;
@@ -75,6 +100,7 @@ body {
 }
 
 .player-card {
+  position: relative;
   display: flex;
   align-items: center;
   background: #ffffffcc;
