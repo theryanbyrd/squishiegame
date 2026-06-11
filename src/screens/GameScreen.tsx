@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import Phaser from "phaser";
 import { useStore, currentPlayer } from "../store/store";
 import { DumplingScene, GAME_WIDTH, GAME_HEIGHT } from "../game/DumplingScene";
+import { stopMusic } from "../game/sounds";
 import type { RunStats } from "../types";
 
 export default function GameScreen() {
@@ -46,6 +47,7 @@ export default function GameScreen() {
 
     return () => {
       done = true;
+      stopMusic();
       game.destroy(true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import type { RunStats } from "../types";
-import { sfx } from "./sounds";
+import { sfx, startMusic, stopMusic } from "./sounds";
 
 export type SceneConfig = {
   playerName: string;
@@ -158,19 +158,27 @@ export class DumplingScene extends Phaser.Scene {
     // bao
     if (this.textures.exists("bao")) this.textures.remove("bao");
     const g = this.make.graphics({ x: 0, y: 0 }, false);
+    // bold dark outline so the bao reads clearly on pastel backgrounds
+    const outline = 0x6e4a3f;
     g.fillStyle(skin.body, 1);
-    g.fillEllipse(32, 38, 56, 46);
-    // bao pleat bump on top
-    g.fillEllipse(32, 18, 22, 14);
+    g.lineStyle(3, outline, 1);
     if (skin.ears) {
       g.fillTriangle(12, 20, 22, 4, 28, 20);
+      g.strokeTriangle(12, 20, 22, 4, 28, 20);
       g.fillTriangle(36, 20, 42, 4, 52, 20);
+      g.strokeTriangle(36, 20, 42, 4, 52, 20);
     }
     if (skin.horn) {
       g.fillStyle(0xffd86b, 1);
-      g.fillTriangle(26, 12, 32, -4, 38, 12);
+      g.fillTriangle(26, 12, 32, 2, 38, 12);
+      g.strokeTriangle(26, 12, 32, 2, 38, 12);
       g.fillStyle(skin.body, 1);
     }
+    g.fillEllipse(32, 38, 56, 46);
+    g.strokeEllipse(32, 38, 56, 46);
+    // bao pleat bump on top
+    g.fillEllipse(32, 18, 22, 14);
+    g.strokeEllipse(32, 18, 22, 14);
     // blush
     g.fillStyle(skin.blush, 1);
     g.fillEllipse(14, 44, 11, 7);
@@ -289,6 +297,7 @@ export class DumplingScene extends Phaser.Scene {
 
   private startRun() {
     this.started = true;
+    startMusic();
     this.startTime = this.time.now;
     this.tweens.killTweensOf(this.bao);
     this.bao.setAngle(0);
@@ -443,6 +452,7 @@ export class DumplingScene extends Phaser.Scene {
   private endRun() {
     if (this.over) return;
     this.over = true;
+    stopMusic();
     sfx.gameover();
     this.spawnTimer?.remove();
     this.physics.pause();
