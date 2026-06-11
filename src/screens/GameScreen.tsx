@@ -15,7 +15,9 @@ export default function GameScreen() {
     let done = false;
 
     const game = new Phaser.Game({
-      type: Phaser.AUTO,
+      // CANVAS, not AUTO: AUTO throws "WebGL unsupported" instead of falling
+      // back when context creation fails (hw acceleration off, context limit)
+      type: Phaser.CANVAS,
       parent: containerRef.current,
       width: GAME_WIDTH,
       height: GAME_HEIGHT,
