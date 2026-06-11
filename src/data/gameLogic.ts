@@ -1,9 +1,9 @@
 // Pure game-result logic shared by the browser store (offline fallback)
 // and the /api serverless functions (authoritative). No DOM, no storage.
 
-import type { Player, PlayerName, RunStats, UnlockType } from "../types";
-import { levelForPoints } from "./levels";
-import { BACKGROUNDS, SKINS, TRAILS } from "./cosmetics";
+import type { Player, PlayerName, RunStats, UnlockType } from "../types.js";
+import { levelForPoints } from "./levels.js";
+import { BACKGROUNDS, SKINS, TRAILS } from "./cosmetics.js";
 
 export const DEFAULT_PLAYERS: { name: PlayerName; avatar: string }[] = [
   { name: "Evie", avatar: "🌸" },

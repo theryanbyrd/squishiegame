@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { readAllDocs, writeDoc } from "./_lib/db";
-import type { PlayerDoc } from "../src/types";
-import { sanitizeStats } from "../src/data/gameLogic";
+import { readAllDocs, writeDoc } from "./_lib/db.js";
+import type { PlayerDoc } from "../src/types.js";
+import { sanitizeStats } from "../src/data/gameLogic.js";
 
 // One-time import of pre-existing localStorage progress. Only allowed
 // while the server has no recorded games, so it can't clobber real data.

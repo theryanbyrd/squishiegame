@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { readAllDocs, writeDoc } from "../../_lib/db";
-import { BACKGROUNDS, SKINS, TRAILS } from "../../../src/data/cosmetics";
+import { readAllDocs, writeDoc } from "../../_lib/db.js";
+import { BACKGROUNDS, SKINS, TRAILS } from "../../../src/data/cosmetics.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "PATCH") {

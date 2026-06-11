@@ -1,6 +1,6 @@
 import { head, put } from "@vercel/blob";
-import type { PlayerDoc } from "../../src/types";
-import { DEFAULT_PLAYERS, makeDefaultPlayer } from "../../src/data/gameLogic";
+import type { PlayerDoc } from "../../src/types.js";
+import { DEFAULT_PLAYERS, makeDefaultPlayer } from "../../src/data/gameLogic.js";
 
 const MAX_SESSIONS = 300;
 

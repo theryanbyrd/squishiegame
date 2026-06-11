@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { readAllDocs, writeDoc, uid } from "./_lib/db";
-import { computeGameResult, sanitizeStats } from "../src/data/gameLogic";
+import { readAllDocs, writeDoc, uid } from "./_lib/db.js";
+import { computeGameResult, sanitizeStats } from "../src/data/gameLogic.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
