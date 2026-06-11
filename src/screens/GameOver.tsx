@@ -8,6 +8,7 @@ import { sfx } from "../game/sounds";
 export default function GameOver() {
   const summary = useStore((s) => s.lastSummary);
   const player = useStore((s) => currentPlayer(s));
+  const gameMode = useStore((s) => s.gameMode);
   const setScreen = useStore((s) => s.setScreen);
 
   const leveledUp = !!summary && summary.newLevel > summary.oldLevel;
@@ -37,9 +38,10 @@ export default function GameOver() {
       <h1 className="title small">Great run, {player.name}! {player.avatar}</h1>
       <div className="summary-card">
         <div className="summary-row big-row">
-          <span>Score</span>
+          <span>{gameMode === "timed" ? "Openings passed" : "Score"}</span>
           <span className="big-num">{summary.runScore}</span>
         </div>
+        {gameMode === "timed" && <div className="tag">⏱ Timed Mode</div>}
         {summary.isNewBestRun && (
           <div className="tag gold">🌟 New best run!</div>
         )}

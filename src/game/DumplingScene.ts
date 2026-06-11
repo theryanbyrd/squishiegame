@@ -7,6 +7,7 @@ export type SceneConfig = {
   skin: string;
   trail: string;
   background: string;
+  gameMode: "classic" | "timed";
   onGameOver: (stats: RunStats) => void;
 };
 
@@ -58,6 +59,9 @@ export class DumplingScene extends Phaser.Scene {
   private fireTimer?: Phaser.Time.TimerEvent;
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private aimAngle = -Math.PI / 2; // space mode aim, starts pointing up
+  private timeLeft = 0; // timed mode countdown, ms
+  private invincibleUntil = 0;
+  private clockText?: Phaser.GameObjects.Text;
 
   private started = false;
   private over = false;
@@ -79,6 +83,8 @@ export class DumplingScene extends Phaser.Scene {
     this.cfg = cfg;
     this.mode = "flappy";
     this.aimAngle = -Math.PI / 2;
+    this.timeLeft = 60_000;
+    this.invincibleUntil = 0;
     this.started = false;
     this.over = false;
     this.runScore = 0;
@@ -137,6 +143,18 @@ export class DumplingScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(20);
 
+    if (this.cfg.gameMode === "timed") {
+      this.clockText = this.add
+        .text(GAME_WIDTH / 2, 132, "⏱ 60s", {
+          fontFamily: "system-ui, sans-serif",
+          fontSize: "28px",
+          fontStyle: "bold",
+          color: textColor,
+        })
+        .setOrigin(0.5)
+        .setDepth(20);
+    }
+
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT - 16, "Byrdman's Squishy Dumpling Dash", {
         fontFamily: "system-ui, sans-serif",
@@ -165,7 +183,10 @@ export class DumplingScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    this.physics.add.overlap(this.bao, this.obstacles, () => this.endRun());
+    this.physics.add.overlap(this.bao, this.obstacles, () => {
+      if (this.cfg.gameMode === "timed") this.bonk();
+      else this.endRun();
+    });
     this.physics.add.overlap(this.bao, this.collectibles, (_b, c) =>
       this.collect(c as Collectible)
     );
@@ -447,7 +468,15 @@ export class DumplingScene extends Phaser.Scene {
     this.combo++;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
     const value = (c.getData("value") as number) ?? (kind === "golden" ? 10 : 3);
-    this.runScore += value;
+    if (this.cfg.gameMode === "timed") {
+      // treats buy time instead of points
+      const secs = kind === "golden" ? 5 : value >= 8 ? 3 : value >= 4 ? 2 : 1;
+      this.timeLeft += secs * 1000;
+      this.scorePop(c.x, c.y, `+${secs}s`, secs >= 3 ? "#e8a200" : "#4a9a6a");
+    } else {
+      this.runScore += value;
+      this.scorePop(c.x, c.y, `+${value}`, value >= 8 ? "#e8a200" : "#b35a8a");
+    }
     if (kind === "golden") {
       this.golden = true;
       sfx.golden();
@@ -455,9 +484,25 @@ export class DumplingScene extends Phaser.Scene {
       sfx.collect();
     }
     this.burst(this.bao.x, this.bao.y, kind === "golden" ? 0xffc83d : 0xfff3a0, 10);
-    this.scorePop(c.x, c.y, `+${value}`, value >= 8 ? "#e8a200" : "#b35a8a");
     this.updateHud();
     this.maybeEnterSpaceMode();
+  }
+
+  private bonk() {
+    if (this.over || this.time.now < this.invincibleUntil) return;
+    this.invincibleUntil = this.time.now + 1300;
+    this.timeLeft -= 3000;
+    sfx.zap();
+    this.scorePop(this.bao.x, this.bao.y - 32, "-3s", "#e85a7a");
+    this.cameras.main.shake(120, 0.008);
+    this.tweens.add({
+      targets: this.bao,
+      alpha: 0.35,
+      duration: 110,
+      yoyo: true,
+      repeat: 5,
+      onComplete: () => this.bao.setAlpha(1),
+    });
   }
 
   private scorePop(x: number, y: number, text: string, color: string) {
@@ -482,6 +527,7 @@ export class DumplingScene extends Phaser.Scene {
   }
 
   private maybeEnterSpaceMode() {
+    if (this.cfg.gameMode !== "classic") return;
     if (this.mode === "flappy" && !this.over && this.runScore >= 100) {
       this.enterSpaceMode();
     }
@@ -653,6 +699,17 @@ export class DumplingScene extends Phaser.Scene {
   update() {
     if (!this.started || this.over) return;
 
+    if (this.cfg.gameMode === "timed") {
+      this.timeLeft -= this.game.loop.delta;
+      const secs = Math.max(0, Math.ceil(this.timeLeft / 1000));
+      this.clockText?.setText(`⏱ ${secs}s`);
+      if (this.timeLeft <= 10_000) this.clockText?.setColor("#e85a7a");
+      if (this.timeLeft <= 0) {
+        this.endRun();
+        return;
+      }
+    }
+
     // trail particles
     this.trailTimer += this.game.loop.delta;
     if (this.trailTimer > 90) {
@@ -701,9 +758,21 @@ export class DumplingScene extends Phaser.Scene {
       }
     }
 
-    // floor / ceiling ends the run
+    // floor / ceiling: ends a classic run; in timed mode it's a time
+    // penalty and a bounce — only the clock ends the run
     if (this.bao.y > GAME_HEIGHT - 16 || this.bao.y < -10) {
-      this.endRun();
+      if (this.cfg.gameMode === "timed") {
+        if (this.bao.y > GAME_HEIGHT - 16) {
+          this.bao.y = GAME_HEIGHT - 16;
+          this.bao.setVelocityY(-360);
+          this.bonk();
+        } else {
+          this.bao.y = -10;
+          this.bao.setVelocityY(60);
+        }
+      } else {
+        this.endRun();
+      }
     }
   }
 

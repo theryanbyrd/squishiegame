@@ -90,6 +90,8 @@ export type PlayerDoc = {
   sessions: SessionLite[];
 };
 
+export type GameMode = "classic" | "timed";
+
 export type Screen =
   | "select"
   | "menu"

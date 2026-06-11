@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   Achievement,
+  GameMode,
   GameSession,
   LeaderboardType,
   Player,
@@ -149,8 +150,10 @@ type AppState = Slices & {
   soundEnabled: boolean;
   lastSummary: RunSummary | null;
   online: boolean; // last server call succeeded
+  gameMode: GameMode;
 
   setScreen: (screen: Screen) => void;
+  startGame: (mode: GameMode) => void;
   selectPlayer: (id: string) => void;
   switchPlayer: () => void;
   setLeaderboardType: (t: LeaderboardType) => void;
@@ -172,8 +175,11 @@ export const useStore = create<AppState>((set, get) => ({
   soundEnabled: isSoundEnabled(),
   lastSummary: null,
   online: false,
+  gameMode: "classic",
 
   setScreen: (screen) => set({ screen }),
+
+  startGame: (mode) => set({ gameMode: mode, screen: "game" }),
 
   selectPlayer: (id) => set({ selectedPlayerId: id, screen: "menu" }),
 

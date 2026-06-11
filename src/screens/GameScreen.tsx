@@ -8,6 +8,7 @@ import type { RunStats } from "../types";
 export default function GameScreen() {
   const containerRef = useRef<HTMLDivElement>(null);
   const player = useStore((s) => currentPlayer(s));
+  const gameMode = useStore((s) => s.gameMode);
   const recordGame = useStore((s) => s.recordGame);
   const setScreen = useStore((s) => s.setScreen);
 
@@ -40,6 +41,7 @@ export default function GameScreen() {
       skin: player.selectedSkin,
       trail: player.selectedTrail,
       background: player.selectedBackground,
+      gameMode,
       onGameOver: (stats: RunStats) => {
         if (done) return;
         done = true;

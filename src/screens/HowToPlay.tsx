@@ -13,6 +13,7 @@ export default function HowToPlay() {
         <p>🏆 A rare <b>golden dumpling</b> is worth +10!</p>
         <p>🔥 Collect every treat to grow your combo for bonus points.</p>
         <p>🚀 Reach <b>100 score</b> and blast off into <b>SPACE MODE</b> — your bao floats to the middle and spins to aim! Point with your finger or mouse (arrow keys spin too) and blast hearts at steamers swooping in from every direction. Tap to fire extra shots!</p>
+        <p>⏱ <b>Timed Mode</b>: race a 60-second clock to pass as many openings as you can! Treats add time instead of points (+1s in your path, +2s or +3s up high or down low, +5s golden). Bumping a steamer costs 3 seconds — only the clock can end your run.</p>
         <p>📈 Points add up after every run — level up, unlock badges, cute skins, trails, and backgrounds!</p>
       </div>
       <button className="btn primary big" onClick={() => setScreen("game")}>
