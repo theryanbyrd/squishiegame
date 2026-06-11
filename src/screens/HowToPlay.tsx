@@ -12,6 +12,7 @@ export default function HowToPlay() {
         <p>⭐ Collect stars, hearts, and boba pearls for +3 score each.</p>
         <p>🏆 A rare <b>golden dumpling</b> is worth +10!</p>
         <p>🔥 Collect every treat to grow your combo for bonus points.</p>
+        <p>🚀 Reach <b>100 score</b> and blast off into <b>SPACE MODE</b> — slide your bao left and right and shoot hearts at invading steamers! Tap to fire extra shots.</p>
         <p>📈 Points add up after every run — level up, unlock badges, cute skins, trails, and backgrounds!</p>
       </div>
       <button className="btn primary big" onClick={() => setScreen("game")}>

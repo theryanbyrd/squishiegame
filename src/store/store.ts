@@ -4,14 +4,18 @@ import type {
   GameSession,
   LeaderboardType,
   Player,
-  PlayerName,
+  PlayerDoc,
   RunStats,
   RunSummary,
   Screen,
   Unlock,
   UnlockType,
 } from "../types";
-import { levelForPoints } from "../data/levels";
+import {
+  computeGameResult,
+  DEFAULT_PLAYERS,
+  makeDefaultPlayer,
+} from "../data/gameLogic";
 import { BACKGROUNDS, SKINS, TRAILS } from "../data/cosmetics";
 import { isSoundEnabled, setSoundEnabled } from "../game/sounds";
 
@@ -20,6 +24,7 @@ const KEYS = {
   sessions: "dumplingDash.sessions",
   achievements: "dumplingDash.achievements",
   unlocks: "dumplingDash.unlocks",
+  migrated: "dumplingDash.migrated",
 } as const;
 
 function loadJSON<T>(key: string, fallback: T): T {
@@ -43,29 +48,15 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-const DEFAULT_PLAYERS: { name: PlayerName; avatar: string }[] = [
-  { name: "Evie", avatar: "🌸" },
-  { name: "Ellie", avatar: "🥟" },
-  { name: "Hazel", avatar: "⭐" },
-];
+function todayLocal(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 function makeDefaultPlayers(): Player[] {
   const now = new Date().toISOString();
-  return DEFAULT_PLAYERS.map((p) => ({
-    id: p.name.toLowerCase(),
-    name: p.name,
-    avatar: p.avatar,
-    totalPoints: 0,
-    level: 1,
-    bestRunScore: 0,
-    gamesPlayed: 0,
-    totalCollectibles: 0,
-    selectedSkin: "classic",
-    selectedTrail: "sparkle",
-    selectedBackground: "cloud",
-    createdAt: now,
-    updatedAt: now,
-  }));
+  return DEFAULT_PLAYERS.map((p) => makeDefaultPlayer(p.name, p.avatar, now));
 }
 
 function isToday(iso: string): boolean {
@@ -78,22 +69,93 @@ function isToday(iso: string): boolean {
   );
 }
 
-type AppState = {
-  screen: Screen;
-  selectedPlayerId: string | null;
+type Slices = {
   players: Player[];
   sessions: GameSession[];
   achievements: Achievement[];
   unlocks: Unlock[];
+};
+
+function docsToSlices(docs: PlayerDoc[]): Slices {
+  return {
+    players: docs.map((d) => d.player),
+    sessions: docs.flatMap((d) =>
+      d.sessions.map((s) => ({
+        id: s.id || uid(),
+        playerId: d.player.id,
+        runScore: s.runScore,
+        pointsEarned: s.pointsEarned,
+        secondsPlayed: s.secondsPlayed,
+        collectibles: s.collectibles,
+        maxCombo: s.maxCombo,
+        createdAt: s.createdAt,
+      }))
+    ),
+    achievements: docs.flatMap((d) =>
+      d.achievements.map((a) => ({
+        id: `${d.player.id}:${a.key}`,
+        playerId: d.player.id,
+        achievementKey: a.key,
+        unlockedAt: a.unlockedAt,
+      }))
+    ),
+    unlocks: docs.flatMap((d) =>
+      d.unlocks.map((u) => ({
+        id: `${d.player.id}:${u.type}:${u.key}`,
+        playerId: d.player.id,
+        unlockType: u.type,
+        unlockKey: u.key,
+        unlockedAt: u.unlockedAt,
+      }))
+    ),
+  };
+}
+
+function slicesToDocs(s: Slices): PlayerDoc[] {
+  return s.players.map((player) => ({
+    player,
+    achievements: s.achievements
+      .filter((a) => a.playerId === player.id)
+      .map((a) => ({ key: a.achievementKey, unlockedAt: a.unlockedAt })),
+    unlocks: s.unlocks
+      .filter((u) => u.playerId === player.id)
+      .map((u) => ({ type: u.unlockType, key: u.unlockKey, unlockedAt: u.unlockedAt })),
+    sessions: s.sessions
+      .filter((x) => x.playerId === player.id)
+      .map((x) => ({
+        id: x.id,
+        runScore: x.runScore,
+        pointsEarned: x.pointsEarned,
+        secondsPlayed: x.secondsPlayed,
+        collectibles: x.collectibles,
+        maxCombo: x.maxCombo,
+        createdAt: x.createdAt,
+        localDate: x.createdAt.slice(0, 10),
+      })),
+  }));
+}
+
+function persistSlices(s: Slices) {
+  saveJSON(KEYS.players, s.players);
+  saveJSON(KEYS.sessions, s.sessions);
+  saveJSON(KEYS.achievements, s.achievements);
+  saveJSON(KEYS.unlocks, s.unlocks);
+}
+
+type AppState = Slices & {
+  screen: Screen;
+  selectedPlayerId: string | null;
   leaderboardType: LeaderboardType;
   soundEnabled: boolean;
   lastSummary: RunSummary | null;
+  online: boolean; // last server call succeeded
 
   setScreen: (screen: Screen) => void;
   selectPlayer: (id: string) => void;
   switchPlayer: () => void;
   setLeaderboardType: (t: LeaderboardType) => void;
   toggleSound: () => void;
+  syncFromServer: () => Promise<void>;
   recordGame: (stats: RunStats) => void;
   setCustomization: (type: UnlockType, key: string) => void;
   isUnlocked: (playerId: string, type: UnlockType, key: string) => boolean;
@@ -109,6 +171,7 @@ export const useStore = create<AppState>((set, get) => ({
   leaderboardType: "totalPoints",
   soundEnabled: isSoundEnabled(),
   lastSummary: null,
+  online: false,
 
   setScreen: (screen) => set({ screen }),
 
@@ -124,6 +187,35 @@ export const useStore = create<AppState>((set, get) => ({
     set({ soundEnabled: on });
   },
 
+  syncFromServer: async () => {
+    try {
+      const res = await fetch("/api/players", { cache: "no-store" });
+      if (!res.ok) throw new Error(`players ${res.status}`);
+      let docs = (await res.json()).docs as PlayerDoc[];
+
+      // one-time upload of pre-server localStorage progress
+      const state = get();
+      const migrated = loadJSON<boolean>(KEYS.migrated, false);
+      const serverEmpty = docs.every((d) => d.player.gamesPlayed === 0);
+      const localHasData = state.players.some((p) => p.gamesPlayed > 0);
+      if (!migrated && serverEmpty && localHasData) {
+        const up = await fetch("/api/migrate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ docs: slicesToDocs(state) }),
+        });
+        if (up.ok) docs = (await up.json()).docs as PlayerDoc[];
+      }
+      saveJSON(KEYS.migrated, true);
+
+      const slices = docsToSlices(docs);
+      persistSlices(slices);
+      set({ ...slices, online: true });
+    } catch {
+      set({ online: false }); // localStorage cache keeps the game playable
+    }
+  },
+
   recordGame: (stats) => {
     const state = get();
     const playerId = state.selectedPlayerId;
@@ -131,136 +223,97 @@ export const useStore = create<AppState>((set, get) => ({
     const player = state.players.find((p) => p.id === playerId);
     if (!player) return;
 
+    // compute locally first so the game-over screen is instant; the
+    // server (re)computes authoritatively from its own state in parallel
     const now = new Date().toISOString();
-    const pointsEarned =
-      stats.runScore +
-      stats.collectibles * 2 +
-      Math.floor(stats.secondsPlayed / 3) +
-      stats.maxCombo * 2;
+    const result = computeGameResult({
+      player,
+      stats,
+      gamesTodayBefore: state.sessions.filter(
+        (s) => s.playerId === playerId && isToday(s.createdAt)
+      ).length,
+      otherPlayersTotals: state.players
+        .filter((p) => p.id !== playerId)
+        .map((p) => p.totalPoints),
+      ownedAchievementKeys: state.achievements
+        .filter((a) => a.playerId === playerId)
+        .map((a) => a.achievementKey),
+      ownedUnlocks: state.unlocks
+        .filter((u) => u.playerId === playerId)
+        .map((u) => ({ type: u.unlockType, key: u.unlockKey })),
+      now,
+    });
 
-    const session: GameSession = {
-      id: uid(),
-      playerId,
-      runScore: stats.runScore,
-      pointsEarned,
-      secondsPlayed: stats.secondsPlayed,
-      collectibles: stats.collectibles,
-      maxCombo: stats.maxCombo,
-      createdAt: now,
+    const slices: Slices = {
+      players: state.players.map((p) =>
+        p.id === playerId ? result.updatedPlayer : p
+      ),
+      sessions: [
+        ...state.sessions,
+        {
+          id: uid(),
+          playerId,
+          runScore: stats.runScore,
+          pointsEarned: result.pointsEarned,
+          secondsPlayed: stats.secondsPlayed,
+          collectibles: stats.collectibles,
+          maxCombo: stats.maxCombo,
+          createdAt: now,
+        },
+      ],
+      achievements: [
+        ...state.achievements,
+        ...result.newAchievementKeys.map((key) => ({
+          id: `${playerId}:${key}`,
+          playerId,
+          achievementKey: key,
+          unlockedAt: now,
+        })),
+      ],
+      unlocks: [
+        ...state.unlocks,
+        ...result.newUnlocks.map((u) => ({
+          id: `${playerId}:${u.type}:${u.key}`,
+          playerId,
+          unlockType: u.type,
+          unlockKey: u.key,
+          unlockedAt: now,
+        })),
+      ],
     };
-    const sessions = [...state.sessions, session];
-
-    const oldLevel = player.level;
-    const totalPoints = player.totalPoints + pointsEarned;
-    const newLevel = levelForPoints(totalPoints);
-    const isNewBestRun = stats.runScore > player.bestRunScore;
-
-    const updatedPlayer: Player = {
-      ...player,
-      totalPoints,
-      level: newLevel,
-      bestRunScore: Math.max(player.bestRunScore, stats.runScore),
-      gamesPlayed: player.gamesPlayed + 1,
-      totalCollectibles: player.totalCollectibles + stats.collectibles,
-      updatedAt: now,
-    };
-    const players = state.players.map((p) =>
-      p.id === playerId ? updatedPlayer : p
-    );
-
-    // achievements
-    const has = (key: string) =>
-      state.achievements.some(
-        (a) => a.playerId === playerId && a.achievementKey === key
-      );
-    const newAchievements: string[] = [];
-    const check = (key: string, condition: boolean) => {
-      if (condition && !has(key)) newAchievements.push(key);
-    };
-    const gamesToday = sessions.filter(
-      (s) => s.playerId === playerId && isToday(s.createdAt)
-    ).length;
-    const topPlayer = [...players].sort(
-      (a, b) => b.totalPoints - a.totalPoints
-    )[0];
-
-    check("first-flight", updatedPlayer.gamesPlayed >= 1);
-    check("tiny-bounce", stats.runScore >= 5);
-    check("getting-good", stats.runScore >= 20);
-    check("dumpling-master", stats.runScore >= 50);
-    check("sparkle-hunter", updatedPlayer.totalCollectibles >= 25);
-    check("boba-boss", updatedPlayer.totalCollectibles >= 100);
-    check("comeback-bao", gamesToday >= 5);
-    check("family-champion", topPlayer.id === playerId && totalPoints > 0);
-    check("golden-dumpling", stats.goldenCollected);
-    check("no-panic-taps", stats.secondsPlayed >= 30);
-
-    const achievements = [
-      ...state.achievements,
-      ...newAchievements.map((key) => ({
-        id: uid(),
-        playerId,
-        achievementKey: key,
-        unlockedAt: now,
-      })),
-    ];
-
-    // cosmetic unlocks by total points
-    const hasUnlock = (type: UnlockType, key: string) =>
-      state.unlocks.some(
-        (u) =>
-          u.playerId === playerId && u.unlockType === type && u.unlockKey === key
-      );
-    const newUnlocks: Unlock[] = [];
-    const pools: { type: UnlockType; defs: typeof SKINS }[] = [
-      { type: "skin", defs: SKINS },
-      { type: "trail", defs: TRAILS },
-      { type: "background", defs: BACKGROUNDS },
-    ];
-    for (const pool of pools) {
-      for (const def of pool.defs) {
-        if (
-          def.pointsRequired > 0 &&
-          totalPoints >= def.pointsRequired &&
-          !hasUnlock(pool.type, def.key)
-        ) {
-          newUnlocks.push({
-            id: uid(),
-            playerId,
-            unlockType: pool.type,
-            unlockKey: def.key,
-            unlockedAt: now,
-          });
-        }
-      }
-    }
-    const unlocks = [...state.unlocks, ...newUnlocks];
 
     const summary: RunSummary = {
       playerId,
       runScore: stats.runScore,
-      pointsEarned,
-      totalPoints,
-      oldLevel,
-      newLevel,
-      newAchievements,
-      newUnlocks,
-      isNewBestRun,
+      pointsEarned: result.pointsEarned,
+      totalPoints: result.updatedPlayer.totalPoints,
+      oldLevel: result.oldLevel,
+      newLevel: result.newLevel,
+      newAchievements: result.newAchievementKeys,
+      newUnlocks: slices.unlocks.slice(state.unlocks.length),
+      isNewBestRun: result.isNewBestRun,
     };
 
-    saveJSON(KEYS.players, players);
-    saveJSON(KEYS.sessions, sessions);
-    saveJSON(KEYS.achievements, achievements);
-    saveJSON(KEYS.unlocks, unlocks);
+    persistSlices(slices);
+    set({ ...slices, lastSummary: summary, screen: "gameover" });
 
-    set({
-      players,
-      sessions,
-      achievements,
-      unlocks,
-      lastSummary: summary,
-      screen: "gameover",
-    });
+    // authoritative server write; on success adopt the server's version
+    void fetch("/api/game-sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId, stats, localDate: todayLocal() }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`session ${res.status}`);
+        const { doc } = (await res.json()) as { doc: PlayerDoc };
+        const cur = get();
+        const merged = docsToSlices(
+          slicesToDocs(cur).map((d) => (d.player.id === playerId ? doc : d))
+        );
+        persistSlices(merged);
+        set({ ...merged, online: true });
+      })
+      .catch(() => set({ online: false }));
   },
 
   setCustomization: (type, key) => {
@@ -275,6 +328,12 @@ export const useStore = create<AppState>((set, get) => ({
     });
     saveJSON(KEYS.players, players);
     set({ players });
+
+    void fetch(`/api/players/${playerId}/customization`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, key }),
+    }).catch(() => set({ online: false }));
   },
 
   isUnlocked: (playerId, type, key) => {

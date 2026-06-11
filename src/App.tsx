@@ -13,6 +13,12 @@ import HowToPlay from "./screens/HowToPlay";
 export default function App() {
   const screen = useStore((s) => s.screen);
 
+  // pull shared progress from the server (leaderboard lives in Blob storage)
+  const syncFromServer = useStore((s) => s.syncFromServer);
+  useEffect(() => {
+    void syncFromServer();
+  }, [syncFromServer]);
+
   // soft pop on every UI button tap (canvas taps have their own flap sound)
   useEffect(() => {
     const onClick = (e: MouseEvent) => {

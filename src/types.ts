@@ -71,6 +71,25 @@ export type RunSummary = {
   isNewBestRun: boolean;
 };
 
+// Server-side document: one per player, stored as a JSON blob
+export type SessionLite = {
+  id: string;
+  runScore: number;
+  pointsEarned: number;
+  secondsPlayed: number;
+  collectibles: number;
+  maxCombo: number;
+  createdAt: string;
+  localDate: string; // player's local YYYY-MM-DD, for daily stats
+};
+
+export type PlayerDoc = {
+  player: Player;
+  achievements: { key: string; unlockedAt: string }[];
+  unlocks: { type: UnlockType; key: string; unlockedAt: string }[];
+  sessions: SessionLite[];
+};
+
 export type Screen =
   | "select"
   | "menu"

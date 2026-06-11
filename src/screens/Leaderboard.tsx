@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useStore } from "../store/store";
 import type { LeaderboardType, Player } from "../types";
 import { levelName } from "../data/levels";
@@ -28,6 +29,12 @@ export default function Leaderboard() {
   const type = useStore((s) => s.leaderboardType);
   const setType = useStore((s) => s.setLeaderboardType);
   const setScreen = useStore((s) => s.setScreen);
+  const syncFromServer = useStore((s) => s.syncFromServer);
+
+  // refresh from the server so other devices' runs show up
+  useEffect(() => {
+    void syncFromServer();
+  }, [syncFromServer]);
 
   const statFor = (p: Player): { value: number; label: string } => {
     switch (type) {

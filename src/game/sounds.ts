@@ -107,6 +107,15 @@ export const sfx = {
       tone({ freq, dur: 0.18, type: "triangle", vol: 0.13, delay: i * 0.1 })
     );
   },
+  /** space mode: fire a bullet — pew! */
+  shoot() {
+    tone({ freq: 920, endFreq: 320, dur: 0.09, type: "square", vol: 0.05 });
+  },
+  /** space mode: invader destroyed — zap + sparkle */
+  zap() {
+    tone({ freq: 280, endFreq: 70, dur: 0.14, type: "square", vol: 0.09 });
+    tone({ freq: 1100, dur: 0.06, vol: 0.07, delay: 0.03 });
+  },
   /** new badge unlocked — twinkle */
   badge() {
     tone({ freq: 988, dur: 0.1, vol: 0.1 });

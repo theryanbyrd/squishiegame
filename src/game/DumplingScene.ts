@@ -52,6 +52,14 @@ export class DumplingScene extends Phaser.Scene {
   private startText!: Phaser.GameObjects.Text;
   private trailTimer = 0;
 
+  private mode: "flappy" | "invaders" = "flappy";
+  private bullets!: Phaser.Physics.Arcade.Group;
+  private invaders!: Phaser.Physics.Arcade.Group;
+  private fireTimer?: Phaser.Time.TimerEvent;
+  private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
+  private waveNumber = 0;
+  private waveSpawnPending = false;
+
   private started = false;
   private over = false;
   private runScore = 0;
@@ -70,6 +78,9 @@ export class DumplingScene extends Phaser.Scene {
 
   init(cfg: SceneConfig) {
     this.cfg = cfg;
+    this.mode = "flappy";
+    this.waveNumber = 0;
+    this.waveSpawnPending = false;
     this.started = false;
     this.over = false;
     this.runScore = 0;
@@ -102,6 +113,8 @@ export class DumplingScene extends Phaser.Scene {
 
     this.obstacles = this.physics.add.group({ allowGravity: false, immovable: true });
     this.collectibles = this.physics.add.group({ allowGravity: false });
+    this.bullets = this.physics.add.group({ allowGravity: false });
+    this.invaders = this.physics.add.group({ allowGravity: false });
 
     const dark = BG_COLORS[this.cfg.background]?.dark;
     const textColor = dark ? "#ffffff" : "#7a5c6e";
@@ -158,9 +171,27 @@ export class DumplingScene extends Phaser.Scene {
     this.physics.add.overlap(this.bao, this.collectibles, (_b, c) =>
       this.collect(c as Collectible)
     );
+    this.physics.add.overlap(this.bullets, this.invaders, (b, inv) =>
+      this.killInvader(
+        b as Phaser.Physics.Arcade.Image,
+        inv as Phaser.Physics.Arcade.Image
+      )
+    );
+    this.physics.add.overlap(this.bao, this.invaders, () => this.endRun());
 
-    this.input.on("pointerdown", () => this.flap());
+    this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
+      if (this.mode === "invaders" && !this.over) {
+        this.bao.x = Phaser.Math.Clamp(p.x, 28, GAME_WIDTH - 28);
+      }
+      this.flap();
+    });
+    this.input.on("pointermove", (p: Phaser.Input.Pointer) => {
+      if (this.mode === "invaders" && !this.over && p.isDown) {
+        this.bao.x = Phaser.Math.Clamp(p.x, 28, GAME_WIDTH - 28);
+      }
+    });
     this.input.keyboard?.on("keydown-SPACE", () => this.flap());
+    this.cursors = this.input.keyboard?.createCursorKeys();
   }
 
   private makeTextures() {
@@ -266,6 +297,28 @@ export class DumplingScene extends Phaser.Scene {
       gg.fillStyle(0xffffff, 1);
       gg.fillCircle(18, 18, 10);
     });
+    // space mode: heart bullet
+    make("bullet", (gg) => {
+      gg.fillStyle(0xff6fa5, 1);
+      gg.fillCircle(14, 13, 5);
+      gg.fillCircle(22, 13, 5);
+      gg.fillTriangle(9, 16, 27, 16, 18, 27);
+    });
+    // space mode: grumpy little steamer invader
+    make("invader", (gg) => {
+      gg.fillStyle(0xd9b98c, 1);
+      gg.fillRoundedRect(2, 6, 32, 10, 5);
+      gg.fillStyle(0xc9a172, 1);
+      gg.fillRoundedRect(0, 14, 36, 16, 7);
+      gg.lineStyle(2, 0xb78f5e, 1);
+      gg.strokeRoundedRect(1, 15, 34, 14, 6);
+      gg.fillStyle(0x4a3640, 1);
+      gg.fillCircle(12, 21, 2.6);
+      gg.fillCircle(24, 21, 2.6);
+      gg.lineStyle(2, 0x4a3640, 1);
+      gg.lineBetween(8, 17, 15, 19);
+      gg.lineBetween(28, 17, 21, 19);
+    });
   }
 
   private drawBackground() {
@@ -294,6 +347,10 @@ export class DumplingScene extends Phaser.Scene {
 
   private flap() {
     if (this.over) return;
+    if (this.mode === "invaders") {
+      this.shootBullet();
+      return;
+    }
     if (!this.started) this.startRun();
     sfx.flap();
     this.bao.setVelocityY(-380);
@@ -387,6 +444,128 @@ export class DumplingScene extends Phaser.Scene {
     }
     this.burst(this.bao.x, this.bao.y, kind === "golden" ? 0xffc83d : 0xfff3a0, 10);
     this.updateHud();
+    this.maybeEnterSpaceMode();
+  }
+
+  private maybeEnterSpaceMode() {
+    if (this.mode === "flappy" && !this.over && this.runScore >= 100) {
+      this.enterSpaceMode();
+    }
+  }
+
+  private enterSpaceMode() {
+    this.mode = "invaders";
+    this.spawnTimer?.remove();
+    this.obstacles.clear(true, true);
+    this.collectibles.clear(true, true);
+
+    (this.bao.body as Phaser.Physics.Arcade.Body).setAllowGravity(false);
+    this.bao.setVelocity(0, 0);
+    this.bao.setAngle(0);
+    this.tweens.add({
+      targets: this.bao,
+      x: GAME_WIDTH / 2,
+      y: GAME_HEIGHT - 80,
+      duration: 600,
+      ease: "Sine.easeInOut",
+    });
+
+    sfx.levelup();
+    const dark = BG_COLORS[this.cfg.background]?.dark;
+    const banner = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, "🚀 SPACE MODE! 🚀", {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "34px",
+        fontStyle: "bold",
+        color: dark ? "#ffffff" : "#b35a8a",
+      })
+      .setOrigin(0.5)
+      .setDepth(30)
+      .setScale(0);
+    this.tweens.add({
+      targets: banner,
+      scale: 1,
+      duration: 400,
+      ease: "Back.easeOut",
+      onComplete: () => {
+        this.tweens.add({
+          targets: banner,
+          alpha: 0,
+          delay: 1100,
+          duration: 400,
+          onComplete: () => banner.destroy(),
+        });
+      },
+    });
+
+    this.fireTimer = this.time.addEvent({
+      delay: 400,
+      loop: true,
+      callback: () => this.shootBullet(),
+    });
+    this.time.delayedCall(900, () => this.spawnWave());
+    this.updateHud();
+  }
+
+  private shootBullet() {
+    if (this.over || this.mode !== "invaders") return;
+    const b = this.bullets.create(
+      this.bao.x,
+      this.bao.y - 36,
+      "bullet"
+    ) as Phaser.Physics.Arcade.Image;
+    b.setVelocityY(-430);
+    b.setDepth(8);
+    b.setCircle(9, 9, 9);
+    sfx.shoot();
+  }
+
+  private spawnWave() {
+    if (this.over || this.mode !== "invaders") return;
+    this.waveNumber++;
+    const cols = Math.min(6, 3 + Math.ceil(this.waveNumber / 2));
+    const rows = Math.min(3, 1 + Math.floor(this.waveNumber / 3));
+    const descend = Math.min(48, 12 + this.waveNumber * 4);
+    const spacing = Math.min(80, (GAME_WIDTH - 100) / (cols - 1));
+    const startX = GAME_WIDTH / 2 - (spacing * (cols - 1)) / 2;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const x = startX + c * spacing;
+        const inv = this.invaders.create(
+          x,
+          -24 - r * 48,
+          "invader"
+        ) as Phaser.Physics.Arcade.Image;
+        inv.setVelocityY(descend);
+        inv.setDepth(7);
+        (inv.body as Phaser.Physics.Arcade.Body).setSize(34, 22);
+        inv.setData("baseX", x);
+        inv.setData("phase", r * 0.9 + c * 0.55);
+      }
+    }
+  }
+
+  private killInvader(
+    bullet: Phaser.Physics.Arcade.Image,
+    inv: Phaser.Physics.Arcade.Image
+  ) {
+    if (this.over || !bullet.active || !inv.active) return;
+    const x = inv.x;
+    const y = inv.y;
+    bullet.destroy();
+    inv.destroy();
+    this.runScore += 2;
+    sfx.zap();
+    this.burst(x, y, 0xd9b98c, 10);
+    // sometimes the steamer drops a star to catch
+    if (Math.random() < 0.22) {
+      const c = this.collectibles.create(x, y, "star") as Collectible;
+      c.kind = "star";
+      c.setVelocityY(150);
+      c.setDepth(6);
+      c.setCircle(16, 2, 2);
+    }
+    this.updateHud();
   }
 
   private burst(x: number, y: number, color: number, count: number) {
@@ -405,8 +584,9 @@ export class DumplingScene extends Phaser.Scene {
 
   private updateHud() {
     this.scoreText.setText(String(this.runScore));
+    const rocket = this.mode === "invaders" ? "🚀  " : "";
     this.infoText.setText(
-      `${this.cfg.playerName}  ·  ✨ ${this.collected}  ·  combo x${this.combo}`
+      `${rocket}${this.cfg.playerName}  ·  ✨ ${this.collected}  ·  combo x${this.combo}`
     );
   }
 
@@ -432,6 +612,11 @@ export class DumplingScene extends Phaser.Scene {
       });
     }
 
+    if (this.mode === "invaders") {
+      this.updateInvaders();
+      return;
+    }
+
     // scoring + cleanup
     for (const o of this.obstacles.getChildren() as Phaser.Physics.Arcade.Image[]) {
       if (
@@ -443,6 +628,8 @@ export class DumplingScene extends Phaser.Scene {
         this.runScore += 1;
         sfx.pass();
         this.updateHud();
+        this.maybeEnterSpaceMode();
+        if (this.mode !== "flappy") return;
       }
       if (o.x < -80) o.destroy();
     }
@@ -460,12 +647,60 @@ export class DumplingScene extends Phaser.Scene {
     }
   }
 
+  private updateInvaders() {
+    // keyboard movement
+    if (this.cursors?.left.isDown) {
+      this.bao.x = Math.max(28, this.bao.x - 5);
+    }
+    if (this.cursors?.right.isDown) {
+      this.bao.x = Math.min(GAME_WIDTH - 28, this.bao.x + 5);
+    }
+
+    // invaders sway side to side while descending
+    const t = this.time.now / 500;
+    for (const inv of this.invaders.getChildren() as Phaser.Physics.Arcade.Image[]) {
+      if (!inv.active) continue;
+      const baseX = inv.getData("baseX") as number;
+      const phase = inv.getData("phase") as number;
+      inv.x = baseX + Math.sin(t + phase) * 34;
+      if (inv.y > GAME_HEIGHT - 116) {
+        this.endRun();
+        return;
+      }
+    }
+
+    for (const b of this.bullets.getChildren() as Phaser.Physics.Arcade.Image[]) {
+      if (b.active && b.y < -20) b.destroy();
+    }
+    for (const c of this.collectibles.getChildren() as Collectible[]) {
+      if (c.active && c.y > GAME_HEIGHT + 30) {
+        c.destroy();
+        this.combo = 0;
+        this.updateHud();
+      }
+    }
+
+    // next wave once the screen is clear
+    if (
+      this.waveNumber > 0 &&
+      !this.waveSpawnPending &&
+      this.invaders.countActive(true) === 0
+    ) {
+      this.waveSpawnPending = true;
+      this.time.delayedCall(900, () => {
+        this.waveSpawnPending = false;
+        this.spawnWave();
+      });
+    }
+  }
+
   private endRun() {
     if (this.over) return;
     this.over = true;
     stopMusic();
     sfx.gameover();
     this.spawnTimer?.remove();
+    this.fireTimer?.remove();
     this.physics.pause();
     this.bao.setTint(0xffb7c5);
     this.burst(this.bao.x, this.bao.y, 0xffb7c5, 16);
