@@ -30,7 +30,12 @@ export function isSoundEnabled(): boolean {
 function getCtx(): AudioContext | null {
   if (!enabled) return null;
   try {
-    if (!ctx) ctx = new AudioContext();
+    // Safari needed the webkit prefix until 14.1 (iOS 12 iPods etc.)
+    const AC: typeof AudioContext =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext;
+    if (!ctx) ctx = new AC();
     if (ctx.state === "suspended") void ctx.resume();
     return ctx;
   } catch {
