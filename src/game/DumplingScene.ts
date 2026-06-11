@@ -57,8 +57,7 @@ export class DumplingScene extends Phaser.Scene {
   private invaders!: Phaser.Physics.Arcade.Group;
   private fireTimer?: Phaser.Time.TimerEvent;
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
-  private waveNumber = 0;
-  private waveSpawnPending = false;
+  private aimAngle = -Math.PI / 2; // space mode aim, starts pointing up
 
   private started = false;
   private over = false;
@@ -79,8 +78,7 @@ export class DumplingScene extends Phaser.Scene {
   init(cfg: SceneConfig) {
     this.cfg = cfg;
     this.mode = "flappy";
-    this.waveNumber = 0;
-    this.waveSpawnPending = false;
+    this.aimAngle = -Math.PI / 2;
     this.started = false;
     this.over = false;
     this.runScore = 0;
@@ -181,13 +179,13 @@ export class DumplingScene extends Phaser.Scene {
 
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
       if (this.mode === "invaders" && !this.over) {
-        this.bao.x = Phaser.Math.Clamp(p.x, 28, GAME_WIDTH - 28);
+        this.aimAt(p.x, p.y);
       }
       this.flap();
     });
     this.input.on("pointermove", (p: Phaser.Input.Pointer) => {
-      if (this.mode === "invaders" && !this.over && p.isDown) {
-        this.bao.x = Phaser.Math.Clamp(p.x, 28, GAME_WIDTH - 28);
+      if (this.mode === "invaders" && !this.over) {
+        this.aimAt(p.x, p.y);
       }
     });
     this.input.keyboard?.on("keydown-SPACE", () => this.flap());
@@ -380,6 +378,10 @@ export class DumplingScene extends Phaser.Scene {
   }
 
   private spawnObstacle() {
+    // difficulty scales with run score: faster scroll, narrower gaps
+    this.speed = Math.min(300, 140 + this.runScore * 1.6);
+    this.gap = Math.max(150, 230 - this.runScore * 0.8);
+
     const margin = 90;
     const gapCenter = Phaser.Math.Between(
       margin + this.gap / 2,
@@ -421,10 +423,6 @@ export class DumplingScene extends Phaser.Scene {
         repeat: -1,
       });
     }
-
-    // gentle difficulty ramp
-    this.speed = Math.min(260, this.speed + 2.5);
-    this.gap = Math.max(170, this.gap - 1.5);
   }
 
   private collect(c: Collectible) {
@@ -465,7 +463,7 @@ export class DumplingScene extends Phaser.Scene {
     this.tweens.add({
       targets: this.bao,
       x: GAME_WIDTH / 2,
-      y: GAME_HEIGHT - 80,
+      y: GAME_HEIGHT / 2 + 40,
       duration: 600,
       ease: "Sine.easeInOut",
     });
@@ -503,45 +501,70 @@ export class DumplingScene extends Phaser.Scene {
       loop: true,
       callback: () => this.shootBullet(),
     });
-    this.time.delayedCall(900, () => this.spawnWave());
+    this.time.delayedCall(900, () => {
+      this.spawnEnemies();
+      this.scheduleEnemySpawn();
+    });
     this.updateHud();
+  }
+
+  private aimAt(x: number, y: number) {
+    this.aimAngle = Phaser.Math.Angle.Between(this.bao.x, this.bao.y, x, y);
   }
 
   private shootBullet() {
     if (this.over || this.mode !== "invaders") return;
+    const a = this.aimAngle;
     const b = this.bullets.create(
-      this.bao.x,
-      this.bao.y - 36,
+      this.bao.x + Math.cos(a) * 34,
+      this.bao.y + Math.sin(a) * 34,
       "bullet"
     ) as Phaser.Physics.Arcade.Image;
-    b.setVelocityY(-430);
+    b.setVelocity(Math.cos(a) * 440, Math.sin(a) * 440);
+    b.setRotation(a + Math.PI / 2);
     b.setDepth(8);
     b.setCircle(9, 9, 9);
     sfx.shoot();
   }
 
-  private spawnWave() {
+  // difficulty scales with score: shorter spawn delays, more and
+  // faster enemies converging from every edge
+  private spaceProgress(): number {
+    return Math.max(0, this.runScore - 100);
+  }
+
+  private scheduleEnemySpawn() {
     if (this.over || this.mode !== "invaders") return;
-    this.waveNumber++;
-    const cols = Math.min(6, 3 + Math.ceil(this.waveNumber / 2));
-    const rows = Math.min(3, 1 + Math.floor(this.waveNumber / 3));
-    const descend = Math.min(48, 12 + this.waveNumber * 4);
-    const spacing = Math.min(80, (GAME_WIDTH - 100) / (cols - 1));
-    const startX = GAME_WIDTH / 2 - (spacing * (cols - 1)) / 2;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const x = startX + c * spacing;
-        const inv = this.invaders.create(
-          x,
-          -24 - r * 48,
-          "invader"
-        ) as Phaser.Physics.Arcade.Image;
-        inv.setVelocityY(descend);
-        inv.setDepth(7);
-        (inv.body as Phaser.Physics.Arcade.Body).setSize(34, 22);
-        inv.setData("baseX", x);
-        inv.setData("phase", r * 0.9 + c * 0.55);
-      }
+    const delay = Math.max(420, 1300 - this.spaceProgress() * 6);
+    this.spawnTimer = this.time.delayedCall(delay, () => {
+      this.spawnEnemies();
+      this.scheduleEnemySpawn();
+    });
+  }
+
+  private spawnEnemies() {
+    if (this.over || this.mode !== "invaders") return;
+    const progress = this.spaceProgress();
+    const count = Math.min(4, 1 + Math.floor(progress / 30));
+    const speed = Math.min(170, 55 + progress * 0.8);
+    for (let i = 0; i < count; i++) {
+      // random point on a random screen edge
+      const side = Phaser.Math.Between(0, 3);
+      const x =
+        side === 0 ? -30 : side === 1 ? GAME_WIDTH + 30 : Phaser.Math.Between(0, GAME_WIDTH);
+      const y =
+        side === 2 ? -30 : side === 3 ? GAME_HEIGHT + 30 : Phaser.Math.Between(60, GAME_HEIGHT);
+      const inv = this.invaders.create(x, y, "invader") as Phaser.Physics.Arcade.Image;
+      inv.setDepth(7);
+      (inv.body as Phaser.Physics.Arcade.Body).setSize(34, 22);
+      // head for the bao, with a little scatter so they don't stack
+      const target = new Phaser.Math.Vector2(
+        this.bao.x + Phaser.Math.Between(-40, 40),
+        this.bao.y + Phaser.Math.Between(-40, 40)
+      );
+      const dir = target.subtract(new Phaser.Math.Vector2(x, y)).normalize();
+      inv.setVelocity(dir.x * speed, dir.y * speed);
+      inv.setRotation(Math.atan2(dir.y, dir.x) + Math.PI / 2);
     }
   }
 
@@ -557,11 +580,12 @@ export class DumplingScene extends Phaser.Scene {
     this.runScore += 2;
     sfx.zap();
     this.burst(x, y, 0xd9b98c, 10);
-    // sometimes the steamer drops a star to catch
+    // sometimes the steamer drops a star that drifts to the bao
     if (Math.random() < 0.22) {
       const c = this.collectibles.create(x, y, "star") as Collectible;
       c.kind = "star";
-      c.setVelocityY(150);
+      const dir = new Phaser.Math.Vector2(this.bao.x - x, this.bao.y - y).normalize();
+      c.setVelocity(dir.x * 90, dir.y * 90);
       c.setDepth(6);
       c.setCircle(16, 2, 2);
     }
@@ -648,49 +672,27 @@ export class DumplingScene extends Phaser.Scene {
   }
 
   private updateInvaders() {
-    // keyboard movement
-    if (this.cursors?.left.isDown) {
-      this.bao.x = Math.max(28, this.bao.x - 5);
-    }
-    if (this.cursors?.right.isDown) {
-      this.bao.x = Math.min(GAME_WIDTH - 28, this.bao.x + 5);
-    }
+    // arrow keys spin the bao; pointer aiming is handled by events
+    if (this.cursors?.left.isDown) this.aimAngle -= 0.075;
+    if (this.cursors?.right.isDown) this.aimAngle += 0.075;
+    this.bao.setRotation(this.aimAngle + Math.PI / 2);
 
-    // invaders sway side to side while descending
-    const t = this.time.now / 500;
+    const offscreen = (o: { x: number; y: number }) =>
+      o.x < -60 || o.x > GAME_WIDTH + 60 || o.y < -60 || o.y > GAME_HEIGHT + 60;
+    const onscreen = (o: { x: number; y: number }) =>
+      o.x > 0 && o.x < GAME_WIDTH && o.y > 0 && o.y < GAME_HEIGHT;
+
+    // enemies spawn off-screen, so only cull ones that flew in and out
     for (const inv of this.invaders.getChildren() as Phaser.Physics.Arcade.Image[]) {
       if (!inv.active) continue;
-      const baseX = inv.getData("baseX") as number;
-      const phase = inv.getData("phase") as number;
-      inv.x = baseX + Math.sin(t + phase) * 34;
-      if (inv.y > GAME_HEIGHT - 116) {
-        this.endRun();
-        return;
-      }
+      if (onscreen(inv)) inv.setData("entered", true);
+      else if (inv.getData("entered") && offscreen(inv)) inv.destroy();
     }
-
     for (const b of this.bullets.getChildren() as Phaser.Physics.Arcade.Image[]) {
-      if (b.active && b.y < -20) b.destroy();
+      if (b.active && offscreen(b)) b.destroy();
     }
     for (const c of this.collectibles.getChildren() as Collectible[]) {
-      if (c.active && c.y > GAME_HEIGHT + 30) {
-        c.destroy();
-        this.combo = 0;
-        this.updateHud();
-      }
-    }
-
-    // next wave once the screen is clear
-    if (
-      this.waveNumber > 0 &&
-      !this.waveSpawnPending &&
-      this.invaders.countActive(true) === 0
-    ) {
-      this.waveSpawnPending = true;
-      this.time.delayedCall(900, () => {
-        this.waveSpawnPending = false;
-        this.spawnWave();
-      });
+      if (c.active && offscreen(c)) c.destroy();
     }
   }
 
