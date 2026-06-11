@@ -29,7 +29,9 @@ export default function GameScreen() {
       },
       scale: {
         mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
+        // the flex .game-container centers the canvas; Phaser's
+        // autoCenter would add its own margin on top and shift it right
+        autoCenter: Phaser.Scale.NO_CENTER,
       },
     });
 
