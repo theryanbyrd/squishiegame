@@ -399,25 +399,39 @@ export class DumplingScene extends Phaser.Scene {
     }
     bottom.setData("scoring", true);
 
-    // collectible in the gap (70% chance)
+    // collectible between obstacles (70% chance) — value scales with how
+    // far off the safe path it sits: in the gap 1pt, outside it 4pts,
+    // way up high or down low 8pts
     const roll = Math.random();
     if (roll < 0.7) {
       const golden = Math.random() < 0.05;
       const kind = golden
         ? "golden"
         : (["star", "heart", "boba"] as const)[Phaser.Math.Between(0, 2)];
+      const cy = golden
+        ? gapCenter + Phaser.Math.Between(-40, 40)
+        : Phaser.Math.Between(70, GAME_HEIGHT - 50);
+      const dist = Math.abs(cy - gapCenter);
+      const value = golden
+        ? 10
+        : dist > this.gap / 2 + 60
+          ? 8
+          : dist > this.gap / 2 - 10
+            ? 4
+            : 1;
       const c = this.collectibles.create(
         x + Phaser.Math.Between(60, 120),
-        gapCenter + Phaser.Math.Between(-40, 40),
+        cy,
         kind
       ) as Collectible;
       c.kind = kind;
+      c.setData("value", value);
       c.setVelocityX(-this.speed);
       c.setDepth(6);
       c.setCircle(16, 2, 2);
       this.tweens.add({
         targets: c,
-        scale: golden ? 1.25 : 1.12,
+        scale: golden ? 1.25 : 1.06 + value * 0.035,
         duration: 400,
         yoyo: true,
         repeat: -1,
@@ -432,17 +446,39 @@ export class DumplingScene extends Phaser.Scene {
     this.collected++;
     this.combo++;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
+    const value = (c.getData("value") as number) ?? (kind === "golden" ? 10 : 3);
+    this.runScore += value;
     if (kind === "golden") {
-      this.runScore += 10;
       this.golden = true;
       sfx.golden();
     } else {
-      this.runScore += 3;
       sfx.collect();
     }
     this.burst(this.bao.x, this.bao.y, kind === "golden" ? 0xffc83d : 0xfff3a0, 10);
+    this.scorePop(c.x, c.y, `+${value}`, value >= 8 ? "#e8a200" : "#b35a8a");
     this.updateHud();
     this.maybeEnterSpaceMode();
+  }
+
+  private scorePop(x: number, y: number, text: string, color: string) {
+    const t = this.add
+      .text(x, y, text, {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "22px",
+        fontStyle: "bold",
+        color,
+      })
+      .setOrigin(0.5)
+      .setDepth(25)
+      .setShadow(0, 1, "rgba(255,255,255,0.7)", 2);
+    this.tweens.add({
+      targets: t,
+      y: y - 44,
+      alpha: 0,
+      duration: 650,
+      ease: "Sine.easeOut",
+      onComplete: () => t.destroy(),
+    });
   }
 
   private maybeEnterSpaceMode() {

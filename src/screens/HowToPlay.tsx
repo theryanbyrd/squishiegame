@@ -9,7 +9,7 @@ export default function HowToPlay() {
       <div className="summary-card howto">
         <p>🥟 Tap, click, or press <b>spacebar</b> to bounce your bao!</p>
         <p>🎋 Dodge the bamboo steamers — touching one ends your run.</p>
-        <p>⭐ Collect stars, hearts, and boba pearls for +3 score each.</p>
+        <p>⭐ Collect stars, hearts, and boba pearls — treats floating in your path are worth +1, but daring ones way up high or down low are worth +4 or even +8!</p>
         <p>🏆 A rare <b>golden dumpling</b> is worth +10!</p>
         <p>🔥 Collect every treat to grow your combo for bonus points.</p>
         <p>🚀 Reach <b>100 score</b> and blast off into <b>SPACE MODE</b> — your bao floats to the middle and spins to aim! Point with your finger or mouse (arrow keys spin too) and blast hearts at steamers swooping in from every direction. Tap to fire extra shots!</p>
